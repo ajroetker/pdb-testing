@@ -1,0 +1,43 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+ENV['VAGRANT_DEFAULT_PROVIDER'] = 'virtualbox'
+
+boxes = {
+    "puppetdb" => "puppetlabs/ubuntu-14.04-64-puppet"
+}
+
+public_key = File.read(File.expand_path('~/.ssh/authorized_keys'))
+ssh_provisioner = <<PROVISION
+mkdir -p ~/.ssh
+cat <<PUBLIC_KEY > ~/.ssh/authorized_keys
+#{public_key}
+PUBLIC_KEY
+PROVISION
+
+puppet_conf_provisioner = <<PROVISION
+puppet config set server $(hostname -f) --section agent
+puppet config set certname $(hostname -f) --section master
+PROVISION
+
+Vagrant.configure("2") do |config|
+    boxes.each_with_index do |(name, box), idx|
+        config.vm.define name do |config|
+            config.vm.box = box
+
+            ip = "172.16.1.299"
+            config.vm.network :private_network, :ip => ip
+            config.vm.hostname = "#{name}.aroetker.lan"
+
+            config.vm.provider :virtualbox do |vb|
+                vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+                vb.customize ['modifyvm', :id, '--memory', 2048]
+            end
+
+            config.vm.provision :shell, :inline => ssh_provisioner
+            config.vm.provision :shell, :inline => puppet_conf_provisioner
+            config.vm.provision "puppet" do |puppet|
+                puppet.module_path = "modules"
+            end
+        end
+    end
+end
